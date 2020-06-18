@@ -1,81 +1,88 @@
 import numpy as np
 from numpy import random as rand
-#import matplotlib.pyplot as plt
-#from random import sample
-#import numba
-#from numba import prange
 import time
-#from numba import cuda
 import multiprocessing as mp
 
 t0=time.time()
 
-def init_conf(l): #apenas numeros pares
+def init_conf(l,free): #apenas numeros pares
+                       #free->dimensão do seu problema, 1D,2D ou 3D
     l=int(l)
     if l%2!=0:
         l=l+1 #caso seja ímpar, ele aumenta um l em 1
-    n=l*l
-    A=[1,-1,1,-1,-1,1,-1,1]
-    A=A*int(n/2)
-    A=np.array(A)
-    A=np.random.choice(A,len(A))
-    Aux=np.zeros((l+2,l+2),dtype=np.int)
+    n=l**free
+    if free==1:
+        return(np.random.choice(np.array([1,-1]*int(n/2)),n))
+    if free==2:
+        n=l*l
+        return(np.reshape(np.random.choice(np.array([1,-1]*int(n/2)),n),(l,l)))
+    if free==3:
+        return(np.reshape(np.random.choice(np.array([1,-1]*int(n/2)),n),(l,l,l)))
     
-    p=0
-    for i in range(1,len(Aux[:,0])-1):
-        for j in range(1,len(Aux[:,0])-1):
-            Aux[i,j]=A[p]
-            p+=1
-
-    return(Aux)
-
-def flip(a,b,B,t=2):
-    #a linha do elemento
-    #b coluna do elemento
+def flip_them_all(A,h,t):
+    #len(A)>>>1 para que haja sucesso
     #A matriz
     #t temperatura
+    free=sum(np.shape(A))
     
-    j=np.array([B[a,b-1],B[a-1,b],B[a,b+1],B[a+1,b]])
-    i=B[a,b]
-    h=1.0 #campo elétrico
-
-    ener=2*i*sum(j)+h
+    if free==1:
+        for i in range(len(A)):
+            i1=rand.randint(1,len(A)-1)
+            j=A[i1-1]+A[i1+1]
+            ener=2*A[i1]*j+h
+            if ener<0:
+                A[i1]=-A[i1]
+            elif ener>0 and rand.rand()<np.exp(-ener/t):
+                A[i1]=-A[i1]
     
-    if ener<0:
-        i=-1*i
-        return i
-    elif ener>0 and rand.rand() < np.exp(-ener/t):
-        i=-1*i
-        return i
-    else:
-        return i
+        
+    if free==2:
+        for i in range(int(len(A)**free)):
+            i1=np.rand.randint(1,len(A)-1)
+            i2=np.rand.randint(1,len(A)-1)
+            j=A[i1,i2-1]+A[i1-1,i2]+A[i1,i2+1]+A[i1+1,i2]
+            ener=2*A[i1,i2]*j+h
+            if ener<0:
+                A[i1,i2]*=-1
+            elif ener>0 and rand.rand() < np.exp(-ener/t):
+                A[i1,i2]*=-1
+        
+        
+    if free==3:
+        for i in range(int(len(A)**free)):
+            i1=np.rand.randint(1,len(A)-1)
+            i2=np.rand.randint(1,len(A)-1)
+            i3=np.random.randint(1,len(A)-1)
+            
+            j=A[i1,i2-1,i3]+A[i1-1,i2,i3]+A[i1,i2+1,i3]+A[i1+1,i2,i3]+A[i1,i2,i3-1]+A[i1+1,i2,i3-1]
+            ener=2*A[i1,i2,i3]*j+h
+            if ener<0:
+                A[i1,i2,i3]*=-1
+            elif ener>0 and rand.rand() < np.exp(-ener/t):
+                A[i1,i2,i3]*=-1
+    return A
 
 def magnetism(A):
-    return(sum(A)/(len(A[0,:])**2))
+    free=sum(np.shape(A))
+    return(sum(A)/(len(A)**free))
 
-def hamiltonian(B,h):
-    ener=0
-    for a in range(len(B[:,0])):
-        for b in range(len(B[:,0])):
-            j=np.array([B[a,b-1],B[a-1,b],B[a,b+1],B[a+1,b]])
-            ener+=-(np.sum(j)-h)*B[a,b]
-    return(ener/4)
-
-dim=4
-m0=[]
-
-A=init_conf(dim)
-def func(j):
-    m=0
-    for i in range(dim**2):
-        i1,j1=rand.randint(0,dim),rand.randint(0,dim)
-        A[i1,j1]=flip(i1, j1, A[:,:])
-    m+=np.sum(A)
+# def hamiltonian(A,h):
+#     free=sum(np.shape(A))
+#     ener=0
+#     for a in range(len(A[:,0])):
+#         for b in range(len(B[:,0])):
+#             j=np.array([A[a,b-1],A[a-1,b],A[a,b+1],A[a+1,b]])
+#             ener+=-(np.sum(j)-h)*B[a,b]
+#     return(ener/4)
 
 
+def func(l,dim=2,t=0.1,h=0): #func que principal, para chamar o paralelismo
+    A=init_conf(l,dim)
+    B=flip_them_all(A,h,t)
+    return [l,B]
 
 pool=mp.Pool(mp.cpu_count())
 pool=mp.Pool(processes=4)
-pool.map(func, range(2,1000,2))
+R=pool.map(func, range(2,8,2))
+
 print(time.time()-t0)
-    
